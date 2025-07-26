@@ -17,9 +17,10 @@ func main() {
 	server := api.NewRobotApi(w)
 	router := server.NewRouter()
 	http.Handle("/", router)
+	slog.Info("Starting robots server on " + defaultPort)
 	if err := http.ListenAndServe(defaultPort, nil); err != nil {
 		slog.Error("failed to start server", "error", err)
 		return
 	}
-  
+
 }

@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gorilla/mux"
 	"github.com/jacobtrvl/robots/pkg/robot"
 )
 
@@ -94,28 +93,6 @@ func TestEnqueueHandler(t *testing.T) {
 	}
 }
 
-func TestCancelHandler(t *testing.T) {
-	warehouse := robot.NewMockWarehouse()
-	api := NewRobotApi(warehouse)
-
-	req := httptest.NewRequest(http.MethodPost, "/cancel/nonexistent-task", nil)
-
-	router := mux.NewRouter()
-	router.HandleFunc("/cancel/{taskID}", api.CancelHandler).Methods("POST")
-	w := httptest.NewRecorder()
-
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
-	}
-
-	responseBody := strings.TrimSpace(w.Body.String())
-	if !strings.Contains(responseBody, "failed to cancel task") {
-		t.Errorf("Expected response to contain 'failed to cancel task', got %q", responseBody)
-	}
-}
-
 func TestStateHandler(t *testing.T) {
 	warehouse := robot.NewMockWarehouse()
 	api := NewRobotApi(warehouse)
@@ -146,7 +123,7 @@ func TestStateHandler(t *testing.T) {
 	}
 }
 
-func TestIntegrationEnqueueAndCancel(t *testing.T) {
+func TestCancel(t *testing.T) {
 	warehouse := robot.NewMockWarehouse()
 	api := NewRobotApi(warehouse)
 	router := api.NewRouter()

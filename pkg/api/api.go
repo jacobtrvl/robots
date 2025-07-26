@@ -25,7 +25,7 @@ func NewRobotApi(w robot.Warehouse) *RobotAPI {
 func (a *RobotAPI) EnqueueHandler(w http.ResponseWriter, r *http.Request) {
 	robot, err := a.getRobot()
 	if err != nil {
-		http.Error(w, "failed to get robot", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	var req struct {
@@ -35,8 +35,7 @@ func (a *RobotAPI) EnqueueHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
-	commands := req.Commands
-	taskID, stateCh, errCh, err := enqueuTask(robot, commands)
+	taskID, stateCh, errCh, err := enqueuTask(robot, req.Commands)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -52,7 +51,7 @@ func (a *RobotAPI) CancelHandler(w http.ResponseWriter, r *http.Request) {
 	taskID := vars["taskID"]
 	robot, err := a.getRobot()
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to get robot: %v", err), http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if err := cancelCommand(robot, taskID); err != nil {
@@ -65,7 +64,7 @@ func (a *RobotAPI) CancelHandler(w http.ResponseWriter, r *http.Request) {
 func (a *RobotAPI) StateHandler(w http.ResponseWriter, r *http.Request) {
 	robot, err := a.getRobot()
 	if err != nil {
-		http.Error(w, "failed to get robot", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	state := currentState(robot)
@@ -117,6 +116,8 @@ func currentState(robot robot.Robot) robot.RobotState {
 	return robot.CurrentState()
 }
 
+// streamState just logs the robot state and errors from channels.
+// Chance of goroutine leak if channels are not closed properly.
 func streamState(_ context.Context, stateChan chan robot.RobotState, errChan chan error) {
 	go func() {
 		for state := range stateChan {
