@@ -93,32 +93,23 @@ func (m *MockRobot) Run() {
 	}
 }
 
-// UpdateStateChannel is non blocking state update
-// Channel might not have a receiver, hence it is non-blocking
-// This could result in missed updates;
-// But taking this approach to avoid command execution getting blocked
+// UpdateStateChannel
+// This gets blocked if there is no channel receiver
+// This logic needs to be changed to unblocking
 func (m *MockRobot) completeTask(taskId string, err error) {
 	task, exists := m.taskList[taskId]
 	if !exists {
 		slog.Warn("Task not found for completion", "taskId", taskId)
 		return
 	}
-	if err != nil {
-		select {
-		case task.errChan <- err:
-		default:
-			slog.Warn("Skipped error update, no listener available")
-		}
-	}
-	select {
-	case task.stateChan <- m.state:
-	default:
-		slog.Warn("Skipped state update, no listener available")
-	}
-	delete(m.taskList, taskId)
-	m.taskOrder = m.taskOrder[1:]
+	// FIXME: Blocks if there is no receiver
+	task.errChan <- err
+	task.stateChan <- m.state
 	close(task.errChan)
 	close(task.stateChan)
+	delete(m.taskList, taskId)
+	m.taskOrder = m.taskOrder[1:]
+
 }
 
 // cancelTask removes the task from the command list and task order
@@ -157,7 +148,7 @@ func (m *MockRobot) runNextCommand() {
 	task.commands = task.commands[1:] // Remove the command from queue
 	err := m.move(c)
 	if err != nil {
-		slog.Error("Error executing command", "command", c, "error", err)
+		m.completeTask(taskId, err)
 		return
 	}
 

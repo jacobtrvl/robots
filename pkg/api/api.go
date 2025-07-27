@@ -1,9 +1,7 @@
 package api
 
 import (
-	"context"
 	"fmt"
-	"strings"
 
 	"encoding/json"
 	"log/slog"
@@ -29,7 +27,6 @@ func (a *RobotAPI) EnqueueHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	validate := r.URL.Query().Get("validate")
 	var req struct {
 		Commands string `json:"commands"`
 	}
@@ -37,14 +34,15 @@ func (a *RobotAPI) EnqueueHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
-	taskID, stateCh, errCh, err := enqueuTask(robot, req.Commands, validate)
+	taskID, stateCh, errCh, err := enqueuTask(robot, req.Commands)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	streamState(r.Context(), stateCh, errCh)
+	streamState(taskID, stateCh, errCh)
 	resp := map[string]string{"task_id": taskID}
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(resp)
 }
 
@@ -98,15 +96,9 @@ func (a *RobotAPI) getRobot() (robot.Robot, error) {
 	return a.w.Robots()[0], nil
 }
 
-func enqueuTask(robot robot.Robot, commands string, validate string) (string, chan robot.RobotState, chan error, error) {
+func enqueuTask(robot robot.Robot, commands string) (string, chan robot.RobotState, chan error, error) {
 	if commands == "" {
 		return "", nil, nil, fmt.Errorf("commands are required")
-	}
-	if validate == "true" {
-		err := isValidCommand(commands, robot)
-		if err != nil {
-			return "", nil, nil, fmt.Errorf("task enqueue failed: %w", err)
-		}
 	}
 	taskId, stateCh, errCh := robot.EnqueueTask(commands)
 	return taskId, stateCh, errCh, nil
@@ -121,59 +113,18 @@ func currentState(robot robot.Robot) robot.RobotState {
 }
 
 // streamState just logs the robot state and errors from channels.
-// Chance of goroutine leak if channels are not closed properly.
-func streamState(_ context.Context, stateChan chan robot.RobotState, errChan chan error) {
+// Chance of goroutine leak if channels are properly handled in Robot function.
+func streamState(taskId string, stateChan chan robot.RobotState, errChan chan error) {
 	go func() {
-		for state := range stateChan {
-			slog.Info("Completed command. Current state:", "X:", state.X, "Y:", state.Y, "HasCrate:", state.HasCrate)
+		if state, ok := <-stateChan; ok {
+			slog.Info("Completed command. Current state:", "X:", state.X, "Y:", state.Y, "HasCrate:", state.HasCrate, "task_id", taskId)
 		}
 	}()
 	go func() {
-		for err := range errChan {
+		if err, ok := <-errChan; ok {
 			if err != nil {
-				slog.Error("Error in robot command execution", "error", err.Error())
+				slog.Error("Task execution failed", "error", err.Error(), "task_id", taskId)
 			}
 		}
 	}()
-}
-
-func isValidCommand(command string, robot robot.Robot) error {
-	state := robot.CurrentState()
-	x, y := int(state.X), int(state.Y)
-	var err error
-	commandSplit := strings.Split(command, " ")
-	for _, c := range commandSplit {
-		x, y, err = simulateMove(x, y, c)
-		if err != nil {
-			return fmt.Errorf("command validation failed %s: %w", command, err)
-		}
-		if !withinBounds(x, y) {
-			return fmt.Errorf("command validation failed %s: out of bounds (%d, %d)", command, x, y)
-		}
-	}
-	return nil
-}
-
-func simulateMove(x int, y int, direction string) (int, int, error) {
-	var err error
-	switch direction {
-	case "N":
-		y++
-	case "S":
-		y--
-	case "E":
-		x++
-	case "W":
-		x--
-	default:
-		err = fmt.Errorf("invalid direction: %s", direction)
-	}
-	return x, y, err
-}
-
-// withinBounds checks coordinates validity.
-// Checking as int to avoid overflow issues
-// This may not work if we are using whole uint range.
-func withinBounds(x, y int) bool {
-	return x >= 0 && x <= 10 && y >= 0 && y <= 10
 }

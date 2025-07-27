@@ -24,7 +24,7 @@ func TestEnqueueHandler(t *testing.T) {
 			requestBody: map[string]string{
 				"commands": "N E S W",
 			},
-			expectedStatus: http.StatusOK,
+			expectedStatus: http.StatusAccepted,
 			expectedBody:   `"task_id"`,
 		},
 		{
@@ -34,22 +34,6 @@ func TestEnqueueHandler(t *testing.T) {
 			},
 			expectedStatus: http.StatusBadRequest,
 			expectedBody:   "commands are required",
-		},
-		{
-			name: "invalid commands",
-			requestBody: map[string]string{
-				"commands": "N I W",
-			},
-			expectedStatus: http.StatusBadRequest,
-			expectedBody:   "command validation failed",
-		},
-		{
-			name: "out of bounds commands",
-			requestBody: map[string]string{
-				"commands": "W W W W W W W W W W W W W W",
-			},
-			expectedStatus: http.StatusBadRequest,
-			expectedBody:   "out of bounds",
 		},
 		{
 			name:           "invalid JSON body",
@@ -137,7 +121,7 @@ func TestCancel(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
+	if w.Code != http.StatusAccepted {
 		t.Fatalf("Enqueue failed with status %d: %s", w.Code, w.Body.String())
 	}
 

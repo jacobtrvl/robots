@@ -11,8 +11,8 @@ make run
 ```
 
 ## Testing
-
-### Enqueue without validation at API layer
+- Port is hardcoded to 8080. Currently not configurable. Change in main.go file, if required.
+### Enqueue API
 ```bash
 curl --location 'http://localhost:8080/enqueue' \
 --header 'Content-Type: application/json' \
@@ -20,17 +20,7 @@ curl --location 'http://localhost:8080/enqueue' \
   "commands": "N E S W N E S W N E S W N E S W"
 }'
 ```
-
-### Enqueue with additional validation before sending to robot
-```bash
-curl --location 'http://localhost:8080/enqueue?validate=true' \
---header 'Content-Type: application/json' \
---data '{
-  "commands": "N E S W N E S W N E S W N E S W"
-}'
-```
-
-**Note:** I implemented validation initially at the API layer and later moved it to MockRobot. Just keeping the logic for demonstration.
+- Note: commands are not validated before accepting.
 
 ### Get the robot state
 ```bash
@@ -41,15 +31,6 @@ curl --location 'http://localhost:8080/state'
 ```bash
 curl --location --request POST 'http://localhost:8080/cancel/<taskid>'
 ```
-
-
-## Commands
-- `N` - Move North
-- `S` - Move South  
-- `E` - Move East
-- `W` - Move West
-
-Commands are space-separated (e.g., "N E S W").
 
 
 ## Notifying Ground Station - Design
