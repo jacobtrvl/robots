@@ -29,6 +29,7 @@ func (a *RobotAPI) EnqueueHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	validate := r.URL.Query().Get("validate")
 	var req struct {
 		Commands string `json:"commands"`
 	}
@@ -36,7 +37,7 @@ func (a *RobotAPI) EnqueueHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
-	taskID, stateCh, errCh, err := enqueuTask(robot, req.Commands)
+	taskID, stateCh, errCh, err := enqueuTask(robot, req.Commands, validate)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -97,13 +98,15 @@ func (a *RobotAPI) getRobot() (robot.Robot, error) {
 	return a.w.Robots()[0], nil
 }
 
-func enqueuTask(robot robot.Robot, commands string) (string, chan robot.RobotState, chan error, error) {
+func enqueuTask(robot robot.Robot, commands string, validate string) (string, chan robot.RobotState, chan error, error) {
 	if commands == "" {
 		return "", nil, nil, fmt.Errorf("commands are required")
 	}
-	err := isValidCommand(context.Background(), commands, robot)
-	if err != nil {
-		return "", nil, nil, fmt.Errorf("task enqueue failed: %w", err)
+	if validate == "true" {
+		err := isValidCommand(commands, robot)
+		if err != nil {
+			return "", nil, nil, fmt.Errorf("task enqueue failed: %w", err)
+		}
 	}
 	taskId, stateCh, errCh := robot.EnqueueTask(commands)
 	return taskId, stateCh, errCh, nil
@@ -134,7 +137,7 @@ func streamState(_ context.Context, stateChan chan robot.RobotState, errChan cha
 	}()
 }
 
-func isValidCommand(_ context.Context, command string, robot robot.Robot) error {
+func isValidCommand(command string, robot robot.Robot) error {
 	state := robot.CurrentState()
 	x, y := int(state.X), int(state.Y)
 	var err error
