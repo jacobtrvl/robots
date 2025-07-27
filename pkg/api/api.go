@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"encoding/json"
 	"log/slog"
@@ -121,13 +122,13 @@ func currentState(robot robot.Robot) robot.RobotState {
 func streamState(_ context.Context, stateChan chan robot.RobotState, errChan chan error) {
 	go func() {
 		for state := range stateChan {
-			slog.Info("Robot state updated", "X:", state.X, "Y:", state.Y, "HasCrate:", state.HasCrate)
+			slog.Info("Completed command. Current state:", "X:", state.X, "Y:", state.Y, "HasCrate:", state.HasCrate)
 		}
 	}()
 	go func() {
 		for err := range errChan {
 			if err != nil {
-				slog.Error("Error in robot state", "error", err.Error())
+				slog.Error("Error in robot command execution", "error", err.Error())
 			}
 		}
 	}()
@@ -137,7 +138,8 @@ func isValidCommand(_ context.Context, command string, robot robot.Robot) error 
 	state := robot.CurrentState()
 	x, y := int(state.X), int(state.Y)
 	var err error
-	for _, c := range command {
+	commandSplit := strings.Split(command, " ")
+	for _, c := range commandSplit {
 		x, y, err = simulateMove(x, y, c)
 		if err != nil {
 			return fmt.Errorf("command validation failed %s: %w", command, err)
@@ -149,19 +151,19 @@ func isValidCommand(_ context.Context, command string, robot robot.Robot) error 
 	return nil
 }
 
-func simulateMove(x int, y int, direction rune) (int, int, error) {
+func simulateMove(x int, y int, direction string) (int, int, error) {
 	var err error
 	switch direction {
-	case 'N':
+	case "N":
 		y++
-	case 'S':
+	case "S":
 		y--
-	case 'E':
+	case "E":
 		x++
-	case 'W':
+	case "W":
 		x--
 	default:
-		err = fmt.Errorf("invalid direction: %c", direction)
+		err = fmt.Errorf("invalid direction: %s", direction)
 	}
 	return x, y, err
 }

@@ -2,6 +2,7 @@ package robot
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"log/slog"
@@ -33,7 +34,7 @@ type MockRobot struct {
 }
 
 type task struct {
-	commands  string
+	commands  []string
 	errChan   chan error
 	stateChan chan RobotState
 }
@@ -53,9 +54,10 @@ func NewMockRobot() *MockRobot {
 
 // EnqueueTask adds a task with commands to the robot's command list
 func (m *MockRobot) EnqueueTask(commands string) (string, chan RobotState, chan error) {
+	commandSplit := strings.Split(commands, " ")
 	taskId := string(uuid.NewUUID())
 	t := task{
-		commands:  commands,
+		commands:  commandSplit,
 		errChan:   make(chan error),
 		stateChan: make(chan RobotState),
 	}
@@ -95,21 +97,28 @@ func (m *MockRobot) Run() {
 // Channel might not have a receiver, hence it is non-blocking
 // This could result in missed updates;
 // But taking this approach to avoid command execution getting blocked
-func (m *MockRobot) UpdateStateChannel(errCh chan error, stateCh chan RobotState, err error, stateChanged bool) {
-	if stateChanged {
-		select {
-		case stateCh <- m.state:
-		default:
-			slog.Warn("Skipped state update, no listener available")
-		}
+func (m *MockRobot) completeTask(taskId string, err error) {
+	task, exists := m.taskList[taskId]
+	if !exists {
+		slog.Warn("Task not found for completion", "taskId", taskId)
+		return
 	}
 	if err != nil {
 		select {
-		case errCh <- err:
+		case task.errChan <- err:
 		default:
 			slog.Warn("Skipped error update, no listener available")
 		}
 	}
+	select {
+	case task.stateChan <- m.state:
+	default:
+		slog.Warn("Skipped state update, no listener available")
+	}
+	delete(m.taskList, taskId)
+	m.taskOrder = m.taskOrder[1:]
+	close(task.errChan)
+	close(task.stateChan)
 }
 
 // cancelTask removes the task from the command list and task order
@@ -140,11 +149,7 @@ func (m *MockRobot) runNextCommand() {
 
 	// Cleanup finished task
 	if len(task.commands) == 0 {
-		close(task.errChan)
-		close(task.stateChan)
-		delete(m.taskList, taskId)
-		m.taskOrder = m.taskOrder[1:]
-
+		m.completeTask(taskId, nil)
 		return
 	}
 
@@ -153,29 +158,38 @@ func (m *MockRobot) runNextCommand() {
 	err := m.move(c)
 	if err != nil {
 		slog.Error("Error executing command", "command", c, "error", err)
-		m.UpdateStateChannel(task.errChan, task.stateChan, err, false)
 		return
 	}
 
 	time.Sleep(time.Second) // Simulate processing time
-	m.UpdateStateChannel(task.errChan, task.stateChan, nil, true)
 }
 
 // move the robot in the specified direction
-// Robot doesn't check for boundaries, it just moves wherever it is told to
-// uint overflows are not handled, assuming API layer handles it
-func (m *MockRobot) move(c byte) error {
+// Bounds are hardcoded as per requirements
+func (m *MockRobot) move(c string) error {
 	switch c {
-	case 'N':
+	case "N":
+		if m.state.Y == 10 {
+			return fmt.Errorf("invalid command: %s, out of bounds", c)
+		}
 		m.state.Y++
-	case 'S':
+	case "S":
+		if m.state.Y == 0 {
+			return fmt.Errorf("invalid command: %s, out of bounds", c)
+		}
 		m.state.Y--
-	case 'E':
+	case "E":
+		if m.state.X == 10 {
+			return fmt.Errorf("invalid command: %s, out of bounds", c)
+		}
 		m.state.X++
-	case 'W':
+	case "W":
+		if m.state.X == 0 {
+			return fmt.Errorf("invalid command: %s, out of bounds", c)
+		}
 		m.state.X--
 	default:
-		return fmt.Errorf("invalid command: %c", c)
+		return fmt.Errorf("invalid command: %s", c)
 	}
 	return nil
 }

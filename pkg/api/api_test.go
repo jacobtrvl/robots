@@ -22,7 +22,7 @@ func TestEnqueueHandler(t *testing.T) {
 		{
 			name: "successful enqueue",
 			requestBody: map[string]string{
-				"commands": "NESW",
+				"commands": "N E S W",
 			},
 			expectedStatus: http.StatusOK,
 			expectedBody:   `"task_id"`,
@@ -38,7 +38,7 @@ func TestEnqueueHandler(t *testing.T) {
 		{
 			name: "invalid commands",
 			requestBody: map[string]string{
-				"commands": "NIW",
+				"commands": "N I W",
 			},
 			expectedStatus: http.StatusBadRequest,
 			expectedBody:   "command validation failed",
@@ -46,7 +46,7 @@ func TestEnqueueHandler(t *testing.T) {
 		{
 			name: "out of bounds commands",
 			requestBody: map[string]string{
-				"commands": "WWWWWWWWWWWWWW",
+				"commands": "W W W W W W W W W W W W W W",
 			},
 			expectedStatus: http.StatusBadRequest,
 			expectedBody:   "out of bounds",
@@ -128,7 +128,7 @@ func TestCancel(t *testing.T) {
 	api := NewRobotApi(warehouse)
 	router := api.NewRouter()
 
-	enqueueBody := map[string]string{"commands": "NSNSNSNSNSNSNSNSNSNS"}
+	enqueueBody := map[string]string{"commands": "N S N S N S N S N S N S N S N S N S"}
 	body, _ := json.Marshal(enqueueBody)
 
 	req := httptest.NewRequest(http.MethodPost, "/enqueue", bytes.NewBuffer(body))
