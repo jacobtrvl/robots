@@ -103,8 +103,11 @@ func (m *MockRobot) completeTask(taskId string, err error) {
 		return
 	}
 	// FIXME: Blocks if there is no receiver
-	task.errChan <- err
-	task.stateChan <- m.state
+	if err != nil {
+		task.errChan <- err
+	} else {
+		task.stateChan <- m.state
+	}
 	close(task.errChan)
 	close(task.stateChan)
 	delete(m.taskList, taskId)
@@ -118,6 +121,7 @@ func (m *MockRobot) cancelTask(taskId string) {
 		slog.Warn("Task not found for cancellation; Task might be already completed or cancelled", "taskId", taskId)
 		return
 	}
+	task := m.taskList[taskId]
 	delete(m.taskList, taskId)
 	for i, id := range m.taskOrder {
 		if id == taskId {
@@ -125,6 +129,8 @@ func (m *MockRobot) cancelTask(taskId string) {
 			break
 		}
 	}
+	close(task.errChan)
+	close(task.stateChan)
 	slog.Info("Task cancelled", "taskId", taskId)
 }
 

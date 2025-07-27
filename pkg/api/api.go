@@ -13,11 +13,15 @@ import (
 
 type RobotAPI struct {
 	w robot.Warehouse
+	// Currently holds the status of all tasks.
+	// This should be persisted & cleared periodically.
+	status map[string]string
 }
 
 func NewRobotApi(w robot.Warehouse) *RobotAPI {
 	return &RobotAPI{
-		w: w,
+		w:      w,
+		status: make(map[string]string),
 	}
 }
 
@@ -39,7 +43,8 @@ func (a *RobotAPI) EnqueueHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	streamState(taskID, stateCh, errCh)
+	a.streamState(taskID, stateCh, errCh)
+	a.status[taskID] = "Queued"
 	resp := map[string]string{"task_id": taskID}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
@@ -58,6 +63,7 @@ func (a *RobotAPI) CancelHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("failed to cancel task: %v", err), http.StatusBadRequest)
 		return
 	}
+	a.status[taskID] = "Cancelled"
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -83,6 +89,7 @@ func (a *RobotAPI) NewRouter() *mux.Router {
 	r.HandleFunc("/enqueue/{robotId}", a.EnqueueHandler).Methods("POST")
 	r.HandleFunc("/cancel/{robotId}/{taskID}", a.CancelHandler).Methods("POST")
 	r.HandleFunc("/state/{robotId}", a.StateHandler).Methods("GET")
+	r.HandleFunc("/status/{taskID}", a.taskStatus).Methods("GET")
 	return r
 }
 
@@ -112,18 +119,31 @@ func currentState(robot robot.Robot) robot.RobotState {
 	return robot.CurrentState()
 }
 
+func (a *RobotAPI) taskStatus(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	taskID := vars["taskID"]
+	status := "Task not found"
+	if s, ok := a.status[taskID]; ok {
+		status = s
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(status)
+}
+
 // streamState just logs the robot state and errors from channels.
 // Chance of goroutine leak if channels are properly handled in Robot function.
-func streamState(taskId string, stateChan chan robot.RobotState, errChan chan error) {
+func (a *RobotAPI) streamState(taskId string, stateChan chan robot.RobotState, errChan chan error) {
 	go func() {
-		if state, ok := <-stateChan; ok {
-			slog.Info("Completed command. Current state:", "X:", state.X, "Y:", state.Y, "HasCrate:", state.HasCrate, "task_id", taskId)
-		}
-	}()
-	go func() {
-		if err, ok := <-errChan; ok {
-			if err != nil {
+		select {
+		case err, ok := <-errChan:
+			if ok && err != nil {
+				a.status[taskId] = "Error: " + err.Error()
 				slog.Error("Task execution failed", "error", err.Error(), "task_id", taskId)
+			}
+		case state, ok := <-stateChan:
+			if ok {
+				a.status[taskId] = "Completed"
+				slog.Info("Completed command. Current state:", "X:", state.X, "Y:", state.Y, "HasCrate:", state.HasCrate, "task_id", taskId)
 			}
 		}
 	}()

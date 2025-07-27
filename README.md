@@ -5,6 +5,14 @@ RESTful APIs and a mock warehouse/robot implementation.
 ## Requirements
 - Go installed (tested with version 1.24.4)
 
+## Regarding status API
+- As per the requirement API that need to be supported is
+   "Create a RESTful API to report the command series's execution status."
+  This could mean we report the status of taskId.
+  But Robot interface predefined in the question doesn't provide any methods to get the status of the task. Hence I am providing state & task status with whatever possible states we can derived of the given interface.
+  I donot want to introduce additional method to interface, but use existing ones & implement the logic
+
+
 ## Running the Application
 ```bash
 make run
@@ -22,6 +30,10 @@ curl --location 'http://localhost:8080/enqueue' \
 ```
 - Note: commands are not validated before accepting.
 
+### Get task status
+```bash
+curl --location 'http://localhost:8080/status/<task_id>'
+```
 ### Get the robot state
 ```bash
 curl --location 'http://localhost:8080/state'
